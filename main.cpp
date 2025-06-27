@@ -1,5 +1,6 @@
-#include <Novice.h>
 #include "Function.h"
+#include <Novice.h>
+#include <Vector3.h>
 
 const char kWindowTitle[] = "LE2D_16_デラセルナ_ニコ";
 
@@ -13,9 +14,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	char keys[256] = { 0 };
 	char preKeys[256] = { 0 };
 
-	Vector3 v1{ 1.0f, 3.0f, -5.0f };
-	Vector3 v2{ 4.0f, -1.0f, 2.0f };
-	float k = { 4.0f };
+	Function* function = new Function();
+
+	Vector3 scale = { 1.2f, 0.79f, -2.1f };
+	Vector3 rotate = { 0.4f, 1.43f, -0.8f };
+	Vector3 translate = { 2.7f, -4.15f, 1.57f };
 
 	// ウィンドウの×ボタンが押されるまでループ
 	while (Novice::ProcessMessage() == 0) {
@@ -30,17 +33,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		/// ↓更新処理ここから
 		///
 
-		Vector3 resultAdd = Add(v1, v2);
-
-		Vector3 resultSubtract = Subtract(v1, v2);
-
-		Vector3 resultMultiply = Multiply(k, v1);
-
-		float resultDot = Dot(v1, v2);
-
-		float resultLength = Length(v1);
-
-		Vector3 resultNormalize = Normalize(v2);
+		Matrix4x4 worldMatrix = function->MakeAffineMatrix(scale, rotate, translate);
 
 		///
 		/// ↑更新処理ここまで
@@ -50,12 +43,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		/// ↓描画処理ここから
 		///
 
-		VectorScreenPrint(0, 0, resultAdd, "  :Add");
-		VectorScreenPrint(0, kColumnHeight, resultSubtract, "  :Subtract");
-		VectorScreenPrint(0, kColumnHeight * 2, resultMultiply, "  :Multiply");
-		Novice::ScreenPrintf(0, kColumnHeight * 3, "%.02f  :Dot", resultDot);
-		Novice::ScreenPrintf(0, kColumnHeight * 4, "%.02f  :Length", resultLength);
-		VectorScreenPrint(0, kColumnHeight * 5, resultNormalize, "  :Normalize");
+		Novice::ScreenPrintf(0, 0, "worldMatrix");
+		function->MatrixScreenPrintf(0, 20, worldMatrix, "worldMatrix");
 
 		///
 		/// ↑描画処理ここまで
