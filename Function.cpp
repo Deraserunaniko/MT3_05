@@ -468,6 +468,31 @@ Matrix4x4 Function::MakeViewportMatrix(float left, float top, float width, float
 	return result;
 }
 
+Matrix4x4 Function::MakeViewMatrix(const Vector3& eye, const Vector3& target, const Vector3& up)
+{
+	Vector3 zAxis = Normalize(Subtract(target, eye));
+	Vector3 xAxis = Normalize(Cross(up, zAxis));
+	Vector3 yAxis = Cross(zAxis, xAxis);
+
+	Matrix4x4 result = MakeIdenity4x4();
+	result.m[0][0] = xAxis.x;
+	result.m[1][0] = xAxis.y;
+	result.m[2][0] = xAxis.z;
+	result.m[0][1] = yAxis.x;
+	result.m[1][1] = yAxis.y;
+	result.m[2][1] = yAxis.z;
+	result.m[0][2] = zAxis.x;
+	result.m[1][2] = zAxis.y;
+	result.m[2][2] = zAxis.z;
+	result.m[3][0] = -Dot(xAxis, eye);
+	result.m[3][1] = -Dot(yAxis, eye);
+	result.m[3][2] = -Dot(zAxis, eye);
+	return result;
+}
+
+
+
+
 // クロス積
 Vector3 Function::Cross(const Vector3& v1, const Vector3& v2) {
 

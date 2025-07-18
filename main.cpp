@@ -1,112 +1,183 @@
 #include <Novice.h>
-#include "Function.h"
 #include <cmath>
-#include"math.h"
-#include <numbers>
-#include<imgui.h>
+#include <Windows.h>
+#include <imgui.h>
 
 const char kWindowTitle[] = "LE2D_16_デラセルナ_ニコ";
 
+//Function function;
+
+// ------------------------ 基本構造体 ------------------------
+struct Vector3 {
+	float x, y, z;
+};
+
+struct Segment {
+	Vector3 origin;
+	Vector3 diff;
+};
 
 struct Sphere {
-	// 中心点
 	Vector3 center;
-
 	float radius;
 };
 
-Function function;
+struct Vector2 {
+	float x, y;
+};
 
-const int kWindowWidth = 1280;
-const int kWindowHeight = 720;
+struct Matrix4x4 {
+	float m[4][4];
+};
 
-void DrawGrid(const Matrix4x4& viewProjectionMatrix, Matrix4x4& viewportMatrix) {
-	// グリットの半分の幅
-	const float kGridHalfWidth = 2.0f;
+// ------------------------ ベクトル関数 ------------------------
+Vector3 Subtract(const Vector3& a, const Vector3& b) { return { a.x - b.x, a.y - b.y, a.z - b.z }; }
 
-	// 分裂数
-	const uint32_t kSubdivision = 10;
+Vector3 Add(const Vector3& a, const Vector3& b) { return { a.x + b.x, a.y + b.y, a.z + b.z }; }
 
-	// 一つ分の長さ
-	const float kGridEvery = (kGridHalfWidth * 2.0f) / float(kSubdivision);
+Vector3 Multiply(const Vector3& v, float scalar) { return { v.x * scalar, v.y * scalar, v.z * scalar }; }
 
-	// 奥から手前への線を順々に引いてく
-	for (uint32_t xIndex = 0; xIndex <= kSubdivision; ++xIndex) {
-		// 上の情報を使ってワールド座標系上の始点と終点を求める
-		float x = -kGridHalfWidth + kGridEvery * xIndex;
+float Dot(const Vector3& a, const Vector3& b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
 
-		Vector3 start = { x, 0.0f, -kGridHalfWidth };
+Vector3 Cross(const Vector3& a, const Vector3& b) { return { a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x }; }
 
-		Vector3 end = { x, 0.0f, kGridHalfWidth };
+float Length(const Vector3& v) { return std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z); }
 
-		// スクリーン座標系まで変換をかける
+Vector3 Normalize(const Vector3& v) {
+	float len = Length(v);
+	if (len == 0.0f)
+		return { 0, 0, 0 };
+	return Multiply(v, 1.0f / len);
+}
 
-		Vector3 screenStart = function.Transform(function.Transform(start, viewProjectionMatrix), viewportMatrix);
-		Vector3 screenEnd = function.Transform(function.Transform(end, viewProjectionMatrix), viewportMatrix);
+Vector3 Project(const Vector3& v1, const Vector3& v2) {
+	float d = Dot(v2, v2);
+	if (d == 0.0f)
+		return { 0, 0, 0 };
+	float t = Dot(v1, v2) / d;
+	return Multiply(v2, t);
+}
 
-		// 変換した座標を使って描画
-		Novice::DrawLine(int(screenStart.x), int(screenStart.y), int(screenEnd.x), int(screenEnd.y), 0xAAAAAAFF);
+Vector3 ClosestPoint(const Vector3& point, const Segment& segment) {
+	Vector3 diff = segment.diff;
+	Vector3 toPoint = Subtract(point, segment.origin);
+	Vector3 projected = Project(toPoint, diff);
+	float t = Dot(projected, diff) / Dot(diff, diff);
+	t = std::fmax(0.0f, std::fmin(1.0f, t));
+	return Add(segment.origin, Multiply(diff, t));
+}
+
+// ------------------------ 行列関数 ------------------------
+Matrix4x4 MakeIdentityMatrix() {
+	Matrix4x4 result{};
+	for (int i = 0; i < 4; ++i) {
+		result.m[i][i] = 1.0f;
 	}
+	return result;
+}
 
-	// 左から右も同じように線を順々に引いてく
-	for (uint32_t zIndex = 0; zIndex <= kSubdivision; ++zIndex) {
-		// 上の情報を使ってワールド座標系上の始点と終点を求める
-		float z = -kGridHalfWidth + kGridEvery * zIndex;
+Matrix4x4 Multiply(const Matrix4x4& m1, const Matrix4x4& m2) {
+	Matrix4x4 result{};
+	for (int i = 0; i < 4; ++i)
+		for (int j = 0; j < 4; ++j)
+			for (int k = 0; k < 4; ++k)
+				result.m[i][j] += m1.m[i][k] * m2.m[k][j];
+	return result;
+}
 
-		Vector3 start = { -kGridHalfWidth, 0.0f, z };
-		Vector3 end = { kGridHalfWidth, 0.0f, z };
+Matrix4x4 MakePerspectiveFovMatrix(float fovY, float aspect, float nearZ, float farZ) {
+	Matrix4x4 result{};
+	float f = 1.0f / tanf(fovY / 2.0f);
+	result.m[0][0] = f / aspect;
+	result.m[1][1] = f;
+	result.m[2][2] = farZ / (farZ - nearZ);
+	result.m[2][3] = 1.0f;
+	result.m[3][2] = -nearZ * farZ / (farZ - nearZ);
+	return result;
+}
 
-		// スクリーン座標系まで変換をかける
-		Vector3 screenStart = function.Transform(function.Transform(start, viewProjectionMatrix), viewportMatrix);
-		Vector3 screenEnd = function.Transform(function.Transform(end, viewProjectionMatrix), viewportMatrix);
+Matrix4x4 MakeViewMatrix(const Vector3& eye, const Vector3& target, const Vector3& up) {
+	Vector3 zAxis = Normalize(Subtract(target, eye));
+	Vector3 xAxis = Normalize(Cross(up, zAxis));
+	Vector3 yAxis = Cross(zAxis, xAxis);
 
-		// 変換した座標を使って描画
-		Novice::DrawLine(int(screenStart.x), int(screenStart.y), int(screenEnd.x), int(screenEnd.y), 0xAAAAAAFF);
+	Matrix4x4 result = MakeIdentityMatrix();
+	result.m[0][0] = xAxis.x;
+	result.m[1][0] = xAxis.y;
+	result.m[2][0] = xAxis.z;
+	result.m[0][1] = yAxis.x;
+	result.m[1][1] = yAxis.y;
+	result.m[2][1] = yAxis.z;
+	result.m[0][2] = zAxis.x;
+	result.m[1][2] = zAxis.y;
+	result.m[2][2] = zAxis.z;
+	result.m[3][0] = -Dot(xAxis, eye);
+	result.m[3][1] = -Dot(yAxis, eye);
+	result.m[3][2] = -Dot(zAxis, eye);
+	return result;
+}
+
+Matrix4x4 MakeViewportMatrix(float left, float top, float width, float height, float minDepth, float maxDepth) {
+	Matrix4x4 result = MakeIdentityMatrix();
+	result.m[0][0] = width / 2.0f;
+	result.m[1][1] = -height / 2.0f;
+	result.m[2][2] = maxDepth - minDepth;
+	result.m[3][0] = left + width / 2.0f;
+	result.m[3][1] = top + height / 2.0f;
+	result.m[3][2] = minDepth;
+	return result;
+}
+
+// ------------------------ 座標変換 ------------------------
+Vector3 Transform(const Vector3& v, const Matrix4x4& m) {
+	float x = v.x * m.m[0][0] + v.y * m.m[1][0] + v.z * m.m[2][0] + m.m[3][0];
+	float y = v.x * m.m[0][1] + v.y * m.m[1][1] + v.z * m.m[2][1] + m.m[3][1];
+	float z = v.x * m.m[0][2] + v.y * m.m[1][2] + v.z * m.m[2][2] + m.m[3][2];
+	float w = v.x * m.m[0][3] + v.y * m.m[1][3] + v.z * m.m[2][3] + m.m[3][3];
+	if (w != 0.0f) {
+		x /= w;
+		y /= w;
+		z /= w;
+	}
+	return { x, y, z };
+}
+
+Vector2 Project(const Vector3& v, const Matrix4x4& viewProjection, const Matrix4x4& viewport) {
+	Vector3 viewProjected = Transform(v, viewProjection);
+	Vector3 result = Transform(viewProjected, viewport);
+	return { result.x, result.y };
+}
+
+// ------------------------ 描画関数 ------------------------
+void DrawGrid(const Matrix4x4& vp, const Matrix4x4& viewport) {
+	const float gridSize = 2.0f;
+	const int divisions = 10;
+	const float interval = (gridSize * 2) / divisions;
+
+	for (int i = 0; i <= divisions; ++i) {
+		float pos = -gridSize + i * interval;
+
+		Vector2 sX = Project({ pos, 0, -gridSize }, vp, viewport);
+		Vector2 eX = Project({ pos, 0, gridSize }, vp, viewport);
+		uint32_t colorX = std::abs(pos) < 0.01f ? 0x000000FF : 0xAAAAAAFF;
+		Novice::DrawLine((int)sX.x, (int)sX.y, (int)eX.x, (int)eX.y, colorX);
+
+		Vector2 sZ = Project({ -gridSize, 0, pos }, vp, viewport);
+		Vector2 eZ = Project({ gridSize, 0, pos }, vp, viewport);
+		uint32_t colorZ = std::abs(pos) < 0.01f ? 0x000000FF : 0xAAAAAAFF;
+		Novice::DrawLine((int)sZ.x, (int)sZ.y, (int)eZ.x, (int)eZ.y, colorZ);
 	}
 }
 
-void DrawSphere(const Sphere& sphere, Matrix4x4& viewProjectionMatrix, Matrix4x4& viewportMatrix, uint32_t color) {
-	// 分裂数
-	const uint32_t kSubdivision = 16;
+void DrawPoint(const Vector3& point, const Matrix4x4& vp, const Matrix4x4& viewport, uint32_t color) {
+	Vector2 screen = Project(point, vp, viewport);
+	Novice::DrawEllipse((int)screen.x, (int)screen.y, 5, 5, 0.0f, color, kFillModeSolid);
+}
 
-	// 経度分割1つ分の角度
-	const float kLonEvery = 2.0f * std::numbers::pi_v<float> / float(kSubdivision);
-
-	// 緯度分割1つ分の角度
-	const float kLatEvery = std::numbers::pi_v<float> / float(kSubdivision);
-
-	// 緯度の方向に分割 -π/2 ~ π/2
-	for (uint32_t latIndex = 0; latIndex < kSubdivision; latIndex++) {
-		float lat = -std::numbers::pi_v<float> / 2.0f + kLatEvery * latIndex;
-
-		// 経度の方向に分割 0 ~ 2π
-		for (uint32_t lonIndex = 0; lonIndex < kSubdivision; lonIndex++) {
-			// 現在の経度
-			float lon = lonIndex * kLonEvery;
-
-			// world座標系でのa,b,cを求める
-			Vector3 a = {
-				sphere.center.x + sphere.radius * cosf(lat) * cosf(lon),
-				sphere.center.y + sphere.radius * sinf(lat),
-				sphere.center.z + sphere.radius * cosf(lat) * sinf(lon) };
-
-			Vector3 b = {
-				sphere.center.x + sphere.radius * cosf(lat + kLatEvery) * cosf(lon), sphere.center.y + sphere.radius * sinf(lat + kLatEvery),
-				sphere.center.z + sphere.radius * cosf(lat + kLatEvery) * sinf(lon) };
-
-			Vector3 c = {
-				sphere.center.x + sphere.radius * cosf(lat) * cosf(lon + kLonEvery), sphere.center.y + sphere.radius * sinf(lat), sphere.center.z + sphere.radius * cosf(lat) * sinf(lon + kLonEvery) };
-
-			// a,b,cをScreen座標系まで変換
-			Vector3 screenA = function.Transform(function.Transform(a, viewProjectionMatrix), viewportMatrix);
-			Vector3 screenB = function.Transform(function.Transform(b, viewProjectionMatrix), viewportMatrix);
-			Vector3 screenC = function.Transform(function.Transform(c, viewProjectionMatrix), viewportMatrix);
-
-			// ab,acで線を引く
-			Novice::DrawLine(int(screenA.x), int(screenA.y), int(screenB.x), int(screenB.y), color);
-			Novice::DrawLine(int(screenA.x), int(screenA.y), int(screenC.x), int(screenC.y), color);
-		}
-	}
+void DrawSegment(const Segment& seg, const Matrix4x4& vp, const Matrix4x4& viewport, uint32_t color) {
+	Vector2 a = Project(seg.origin, vp, viewport);
+	Vector2 b = Project(Add(seg.origin, seg.diff), vp, viewport);
+	Novice::DrawLine((int)a.x, (int)a.y, (int)b.x, (int)b.y, color);
 }
 
 
@@ -116,24 +187,27 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// ライブラリの初期化
 	Novice::Initialize(kWindowTitle, 1280, 720);
 
+	// カメラ設定
+	Vector3 cameraPos = { 0, 3, -6 };
+	Vector3 cameraTarget = { 0, 0, 0 };
+	Vector3 up = { 0, 1, 0 };
+
+	// 行列
+	Matrix4x4 viewMatrix = MakeViewMatrix(cameraPos, cameraTarget, up);
+	Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, 1280.0f / 720.0f, 0.1f, 100.0f);
+	Matrix4x4 viewProjection = Multiply(viewMatrix, projectionMatrix);
+	Matrix4x4 viewportMatrix = MakeViewportMatrix(0, 0, 1280, 720, 0.0f, 1.0f);
+
+	// 初期データ
+	Segment segment = {
+		{-2, -1, 0},
+		{5,  3,  2}
+	};
+	Vector3 point = { -1.5f, 0.6f, 0.6f };
+
 	// キー入力結果を受け取る箱
 	char keys[256] = { 0 };
 	char preKeys[256] = { 0 };
-
-	Sphere sphere = {
-		{0.0f, 0.0f - 1.0f},
-
-		10.0f
-	};
-
-	Vector3 cameraRotate{ 0.26f, 0.0f, 0.0f };
-
-	Vector3 cameraTranslate{ 0.0f, 1.9f, -6.49f };
-
-	//Vector3 cameraPosition{0.0f, 0.0f, 8.0f};
-
-	uint32_t color = 0xFFFFFFFF;
-
 
 	// ウィンドウの×ボタンが押されるまでループ
 	while (Novice::ProcessMessage() == 0) {
@@ -148,20 +222,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		/// ↓更新処理ここから
 		///
 
-		Matrix4x4 cameraMatrix = function.MakeAffineMatrix({ 1.0f, 1.0f, 1.0f }, cameraRotate, cameraTranslate);
-		Matrix4x4 viewMatrix = function.Inverse(cameraMatrix);
-		Matrix4x4 projectionMatrix = function.MakePerspectiveFovMatrix(0.45f, float(kWindowWidth) / float(kWindowHeight), 0.1f, 100.0f);
-		// WVPMatrixの作成
-		Matrix4x4 viewProjectionMatrix = function.Multiply(viewMatrix, projectionMatrix);
-		// viewPortMatrixの作成
-		Matrix4x4 viewportMatrix = function.MakeViewportMatrix(0, 0, float(kWindowWidth), float(kWindowHeight), 0.0f, 1.0f);
+		// 最近接点計算
+		Vector3 closest = ClosestPoint(point, segment);
 
-		ImGui::Begin("window");
-		ImGui::DragFloat3("CameraTranslate", &cameraTranslate.x, 0.01f);
-		ImGui::DragFloat3("cameraRotate", &cameraRotate.x, 0.01f);
-		ImGui::DragFloat3("cameraCenter", &sphere.center.x, 0.01f);
-		ImGui::DragFloat("cameraRadius", &sphere.radius, 0.01f);
+		// ImGui GUI
+		ImGui::Begin("Segment Control");
+		ImGui::DragFloat3("Segment Origin", &segment.origin.x, 0.1f);
+		ImGui::DragFloat3("Segment Diff", &segment.diff.x, 0.1f);
+		ImGui::DragFloat3("Point", &point.x, 0.1f);
 		ImGui::End();
+
+
 
 		///
 		/// ↑更新処理ここまで
@@ -171,9 +242,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		/// ↓描画処理ここから
 		///
 
-		DrawGrid(viewProjectionMatrix, viewportMatrix);
-
-		DrawSphere(sphere, viewProjectionMatrix, viewportMatrix, color);
+		// 描画
+		DrawGrid(viewProjection, viewportMatrix);
+		DrawSegment(segment, viewProjection, viewportMatrix, 0x0000FFFF);
+		DrawPoint(point, viewProjection, viewportMatrix, 0xFF0000FF);   // 点（赤）
+		DrawPoint(closest, viewProjection, viewportMatrix, 0x00FF00FF); // 最近接点（緑）
 
 		///
 		/// ↑描画処理ここまで
