@@ -388,7 +388,9 @@ Matrix4x4 Function::MakeAffineMatrix(const Vector3& scale, const Vector3& rotate
 	return result;
 }
 
-Matrix4x4 Function::MakePerspectiveFovMatrix(float fovY, float aspectRatio, float nearClip, float farClip) {
+
+Matrix4x4 Function::MakePerspectiveFovMatrix(float fovY, float aspectRatio, float nearClip, float farClip)
+{
 	Matrix4x4 result = {};
 
 	float cot = 1.0f / std::tanf(fovY / 2.0f);
@@ -416,7 +418,8 @@ Matrix4x4 Function::MakePerspectiveFovMatrix(float fovY, float aspectRatio, floa
 	return result;
 }
 
-Matrix4x4 Function::MakeOrthographicMatrix(float left, float top, float right, float bottom, float nearClip, float farClip) {
+Matrix4x4 Function::MakeOrthographicMatrix(float left, float top, float right, float bottom, float nearClip, float farClip)
+{
 	Matrix4x4 result = {};
 
 	result.m[0][0] = 2.0f / (right - left);
@@ -442,7 +445,8 @@ Matrix4x4 Function::MakeOrthographicMatrix(float left, float top, float right, f
 	return result;
 }
 
-Matrix4x4 Function::MakeViewportMatrix(float left, float top, float width, float height, float minDepth, float maxDepth) {
+Matrix4x4 Function::MakeViewportMatrix(float left, float top, float width, float height, float minDepth, float maxDepth)
+{
 	Matrix4x4 result = {};
 
 	result.m[0][0] = width / 2.0f;
@@ -468,13 +472,7 @@ Matrix4x4 Function::MakeViewportMatrix(float left, float top, float width, float
 	return result;
 }
 
-// クロス積
-Vector3 Function::Cross(const Vector3& v1, const Vector3& v2) {
 
-	Vector3 result = { v1.y * v2.z - v1.z * v2.y, v1.z * v2.x - v1.x * v2.z, v1.x * v2.y - v1.y * v2.x };
-
-	return result;
-}
 
 void Function::MatrixScreenPrintf(int x, int y, const Matrix4x4& matrix, const char* label) {
 	for (int row = 0; row < 4; ++row) {
