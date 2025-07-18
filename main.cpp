@@ -1,5 +1,6 @@
 #include <Novice.h>
 #include "Function.h"
+#include <imgui.h>
 
 const char kWindowTitle[] = "LE2D_16_デラセルナ_ニコ";
 
