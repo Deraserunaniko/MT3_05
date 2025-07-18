@@ -1,7 +1,7 @@
 #include <Novice.h>
 #include "Function.h"
 
-const char kWindowTitle[] = "LE2C_20_タニタ_カイセイ";
+const char kWindowTitle[] = "LE2D_16_デラセルナ_ニコ";
 
 const int kWindowWidth = 1280;
 const int kWindowHeight = 720;
